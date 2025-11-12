@@ -406,23 +406,23 @@ def open_cmpt365_file(path: str):
         return
 
     try:
-        rgb_bytes = lzw_decode(payload)
+        bmp_bytes = lzw_decode(payload)
     except Exception as e:
         clear_compression_stats()
         messagebox.showerror("Decode Error", f"LZW decode failed:\n{e}")
         return
 
+    errors = validate_bmp(bmp_bytes)
+    if errors:
+        clear_compression_stats()
+        show_message_on_canvas("Decoded payload is not a valid BMP:\n" + "\n".join(f"- {e}" for e in errors))
+        return
+
     total_size = os.path.getsize(path)
 
-    img = BmpImage.from_raw_rgb(
-        rgb_bytes=rgb_bytes,
-        width=hdr["width"],
-        height=hdr["height"],
-        filepath=path,
-        bpp=24,
-        file_size=total_size
-    )
+    img = BmpImage(filepath=path, bmp_bytes=bmp_bytes, file_size=total_size)
     post_open_success(img, path)
+
 
 def open_bmp_file(path: str):
     global bmp_image
@@ -514,10 +514,17 @@ def compress_to_cmpt365():
         messagebox.showwarning("No Image", "Open a BMP file first.")
         return
 
-    src = bmp_image.original_bytes
-    original_size = bmp_image.get_file_size()
+    src = getattr(bmp_image, "bmp_bytes", None)
+    if not src:
+        messagebox.showwarning(
+            "No BMP Data",
+            "Current image has no BMP source bytes to compress."
+        )
+        return
+
     width = bmp_image.get_original_width()
     height = bmp_image.get_original_height()
+    original_size = len(src)  # size of BMP bytes we’re compressing
 
     t0 = time.perf_counter()
     encoded = lzw_encode(src)
@@ -526,9 +533,11 @@ def compress_to_cmpt365():
     hdr = pack_header(width, height, original_size, len(encoded))
 
     default_name = os.path.splitext(os.path.basename(bmp_image.filepath or "output"))[0] + ".cmpt365"
-    save_path = filedialog.asksaveasfilename(defaultextension=".cmpt365",
-                                             initialfile=default_name,
-                                             filetypes=[("CMPT365 File", "*.cmpt365")])
+    save_path = filedialog.asksaveasfilename(
+        defaultextension=".cmpt365",
+        initialfile=default_name,
+        filetypes=[("CMPT365 File", "*.cmpt365")]
+    )
     if not save_path:
         messagebox.showerror("Compression Cancelled", "File not saved.")
         return
@@ -549,6 +558,7 @@ def compress_to_cmpt365():
     ratio_var.set(f"{ratio:.3f}x")
     time_ms_var.set(f"{(t1 - t0)*1000:.2f}")
     messagebox.showinfo("Saved", f"Saved {save_path} successfully")
+
 
 # -------- UI --------
 root = tk.Tk()
