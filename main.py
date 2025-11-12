@@ -76,6 +76,11 @@ class BmpImage:
         return cls(filepath=filepath, bmp_bytes=bmp_bytes)
 
     def get_file_size(self):
+        if self.filepath and os.path.exists(self.filepath):
+            try:
+                return os.path.getsize(self.filepath)
+            except OSError:
+                pass
         if self.file_size:
             return self.file_size
         elif self.bmp_bytes:
@@ -285,7 +290,7 @@ def unpack_header(data: bytes):
 
 MAX_BITS = 16
 MAX_DICT = (1 << MAX_BITS)
-# Encode function adapted and ported to Python from GeeksForGeeks (LZW)
+# Encode function adapted and ported to Python from GeeksForGeeks (LZW) and CMPT 365 course slides.
 # https://www.geeksforgeeks.org/computer-networks/lzw-lempel-ziv-welch-compression-technique/
 def lzw_encode(src_bytes: bytes) -> bytes:
     if not src_bytes:
@@ -316,7 +321,7 @@ def lzw_encode(src_bytes: bytes) -> bytes:
     encoded = struct.pack("<" + "H" * len(out), *out)
     return bytes(encoded)
 
-# Decode function adapted and ported to Python from GeeksForGeeks (LZW)
+# Decode function adapted and ported to Python from GeeksForGeeks (LZW) and CMPT 365 course slides.
 # https://www.geeksforgeeks.org/computer-networks/lzw-lempel-ziv-welch-compression-technique/
 def lzw_decode(src_encoded: bytes) -> bytes:
     if not src_encoded:
@@ -413,7 +418,7 @@ def open_cmpt365_file(path: str):
         messagebox.showerror("Decode Error", f"LZW decode failed:\n{e}")
         return
 
-    total_size = struct.calcsize(HEADER_STRUCT) + len(payload)
+    total_size = os.path.getsize(path)
 
     img = BmpImage.from_raw_rgb(
         rgb_bytes=rgb_bytes,
@@ -542,11 +547,12 @@ def compress_to_cmpt365():
         messagebox.showerror("Write Error", f"Failed to save file:\n{e}")
         return
 
+    compressed_os_size = os.path.getsize(save_path)
+
     original_size_var.set(str(original_size))
-    total_compressed_size = struct.calcsize(HEADER_STRUCT) + len(encoded)
-    ratio = original_size / total_compressed_size
-    compressed_size_var.set(str(total_compressed_size))
-    ratio_var.set(f"{(ratio):.3f}x")
+    compressed_size_var.set(str(compressed_os_size))
+    ratio = (original_size / compressed_os_size) if compressed_os_size else float('inf')
+    ratio_var.set(f"{ratio:.3f}x")
     time_ms_var.set(f"{(t1 - t0)*1000:.2f}")
     messagebox.showinfo("Saved", f"Saved {save_path} successfully")
 
