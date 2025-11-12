@@ -185,19 +185,26 @@ class BmpImage:
 
     def refresh_scale(self):
         if self.scale <= 0:
-            self.display_bytes = b""; self.width = 0; self.height = 0; return
+            self.display_bytes = b""
+            self.width = 0
+            self.height = 0
+            return
         W = self.get_original_width(); H = self.get_original_height()
         s = float(self.scale) / 50.0
         w = max(1, int(round(W * s))); h = max(1, int(round(H * s)))
         self.width = w; self.height = h
         buf = self.original_bytes; stride = W * 3; out = bytearray()
         if s <= 1.0:
-            sx = W / w; sy = H / h
+            sx = W / w
+            sy = H / h
             for y_out in range(h):
-                ys = int(y_out * sy); high_y = max(ys + 1, math.floor((y_out + 1) * sy))
+                ys = int(y_out * sy)
+                high_y = max(ys + 1, math.floor((y_out + 1) * sy))
                 for x_out in range(w):
-                    xs = int(x_out * sx); high_x = max(xs + 1, math.floor((x_out + 1) * sx))
-                    r_run = g_run = b_run = 0.0; cnt = 0
+                    xs = int(x_out * sx)
+                    high_x = max(xs + 1, math.floor((x_out + 1) * sx))
+                    r_run = g_run = b_run = 0.0
+                    cnt = 0
                     for y_src in range(ys, high_y):
                         row_base = y_src * stride
                         for x_src in range(xs, high_x):
@@ -245,36 +252,33 @@ class BmpImage:
     def get_displayable_image(self): return self.display_bytes
 
 # -------- .cmpt365 file --------
-# magic[8]       = b"CMPT365\0"
-# width          u32
-# height         u32
-# channels       u16  (3)
-# original_size  u32
+# magic[8]        = b"CMPT365\0"
+# width           u32
+# height          u32
+# original_size   u32
 # compressed_size u32
 # payload: encoded bytes
 CMPT365_MAGIC = b"CMPT365\x00"
-HEADER_STRUCT = "<8sIIHII"
+HEADER_STRUCT = "<8sIIII"
 
-def pack_header(width, height, channels, original_size, compressed_size):
+def pack_header(width, height, original_size, compressed_size):
     return struct.pack(
         HEADER_STRUCT,
         CMPT365_MAGIC,
         width,
         height,
-        channels,
         original_size,
         compressed_size,
     )
 
 def unpack_header(data: bytes):
-    magic, width, height, channels, original_size, compressed_size = struct.unpack(
+    magic, width, height, original_size, compressed_size = struct.unpack(
         HEADER_STRUCT, data[:struct.calcsize(HEADER_STRUCT)]
     )
     return {
         "magic": magic,
         "width": width,
         "height": height,
-        "channels": channels,
         "original_size": original_size,
         "compressed_size": compressed_size,
     }
@@ -412,7 +416,6 @@ def open_cmpt365_file(path: str):
 
     total_size = struct.calcsize(HEADER_STRUCT) + len(payload)
 
-    # bpp is not stored in .cmpt365; assume 24 for UI and stride logic
     img = BmpImage.from_raw_rgb(
         rgb_bytes=rgb_bytes,
         width=hdr["width"],
@@ -431,7 +434,10 @@ def open_bmp_file(path: str):
     except ValueError as e:
         bmp_image = None
         file_path_entry.delete(0, tk.END)
-        file_size_var.set("—"); width_var.set("—"); height_var.set("—"); bpp_var.set("—")
+        file_size_var.set("—")
+        width_var.set("—")
+        height_var.set("—")
+        bpp_var.set("—")
         clear_compression_stats()
         show_message_on_canvas(str(e))
         return
@@ -519,8 +525,7 @@ def compress_to_cmpt365():
     encoded = lzw_encode(src)
     t1 = time.perf_counter()
 
-    # bpp removed from header; channels fixed to 3
-    hdr = pack_header(width, height, 3, original_size, len(encoded))
+    hdr = pack_header(width, height, original_size, len(encoded))
 
     default_name = os.path.splitext(os.path.basename(bmp_image.filepath or "output"))[0] + ".cmpt365"
     save_path = filedialog.asksaveasfilename(defaultextension=".cmpt365",
