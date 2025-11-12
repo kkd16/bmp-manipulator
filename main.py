@@ -544,9 +544,10 @@ def compress_to_cmpt365():
         return
 
     original_size_var.set(str(original_size))
-    total_compressed_size = str(struct.calcsize(HEADER_STRUCT) + len(encoded))
-    compressed_size_var.set(total_compressed_size)
-    ratio_var.set(f"{(original_size / total_compressed_size):.3f}x" if len(encoded) else "—")
+    total_compressed_size = struct.calcsize(HEADER_STRUCT) + len(encoded)
+    ratio = original_size / total_compressed_size
+    compressed_size_var.set(str(total_compressed_size))
+    ratio_var.set(f"{(ratio):.3f}x")
     time_ms_var.set(f"{(t1 - t0)*1000:.2f}")
     messagebox.showinfo("Saved", f"Saved {save_path} successfully")
 
