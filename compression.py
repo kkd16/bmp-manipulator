@@ -10,7 +10,7 @@ import struct
 CMPT365_MAGIC = b"CMPT365\x00"
 HEADER_STRUCT = "<8sIIII"
 
-def pack_header(width, height, original_size, compressed_size):
+def pack_header(width, height, original_size, compressed_size) -> bytes:
     return struct.pack(
         HEADER_STRUCT,
         CMPT365_MAGIC,
@@ -20,7 +20,7 @@ def pack_header(width, height, original_size, compressed_size):
         compressed_size,
     )
 
-def unpack_header(data: bytes):
+def unpack_header(data: bytes) -> dict:
     magic, width, height, original_size, compressed_size = struct.unpack(
         HEADER_STRUCT, data[:struct.calcsize(HEADER_STRUCT)]
     )

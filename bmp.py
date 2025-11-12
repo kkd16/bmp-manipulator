@@ -1,4 +1,5 @@
 import numpy as np
+from typing import Self
 import math
 import os
 
@@ -19,7 +20,7 @@ class BmpImage:
         self.refresh()
 
     @classmethod
-    def validate(cls, bmp_bytes):
+    def validate(cls, bmp_bytes) -> list[str]:
         errors = []
         if not bmp_bytes or len(bmp_bytes) < 54:
             return ["File too small to be a valid BMP (needs at least 54 bytes)"]
@@ -44,7 +45,7 @@ class BmpImage:
 
 
     @classmethod
-    def from_file(cls, filepath):
+    def from_file(cls, filepath) -> Self:
         with open(filepath, "rb") as f:
             bmp_bytes = f.read()
         errors = BmpImage.validate(bmp_bytes)
@@ -52,7 +53,7 @@ class BmpImage:
             raise ValueError("BMP validation failed:\n" + "\n".join(f"- {e}" for e in errors))
         return cls(filepath=filepath, bmp_bytes=bmp_bytes)
 
-    def get_file_size(self):
+    def get_file_size(self) -> int:
         if self.filepath and os.path.exists(self.filepath):
             try:
                 return os.path.getsize(self.filepath)
@@ -64,56 +65,74 @@ class BmpImage:
             return int.from_bytes(self.bmp_bytes[2:6], "little")
         return 0
 
-    def _parse_width(self):
+    def _parse_width(self) -> int:
         if self.bmp_bytes:
             return int.from_bytes(self.bmp_bytes[18:22], "little")
-        return None
+        return 0
 
-    def _parse_height(self):
+    def _parse_height(self) -> int:
         if self.bmp_bytes:
             return int.from_bytes(self.bmp_bytes[22:26], "little")
-        return None
+        return 0
 
-    def get_original_width(self): return self.original_width
-    def get_original_height(self): return self.original_height
-    def get_width(self): return self.width
-    def get_height(self): return self.height
+    def get_original_width(self) -> int:
+        if self.original_width is not None:
+            return self.original_width
+        return 0
 
-    def get_bits_per_pixel(self):
+    def get_original_height(self) -> int:
+        if self.original_height is not None:
+            return self.original_height
+        return 0
+
+    def get_width(self) -> int:
+        if self.width is not None:
+            return self.width
+        return 0
+
+    def get_height(self) -> int:
+        if self.height is not None:
+            return self.height
+        return 0
+
+    def get_bits_per_pixel(self) -> int:
         if self.bpp:
             return self.bpp
         elif self.bmp_bytes:
             return int.from_bytes(self.bmp_bytes[28:30], 'little')
-        return None
+        return 0
 
-    def get_pixel_offset(self):
-        return int.from_bytes(self.bmp_bytes[10:14], "little")
+    def get_pixel_offset(self) -> int:
+        if self.bmp_bytes:
+            return int.from_bytes(self.bmp_bytes[10:14], "little")
+        return 0
 
-    def get_pixel_array(self):
+    def get_pixel_array(self) -> bytes:
         if self.bmp_bytes:
             offset = self.get_pixel_offset()
             return self.bmp_bytes[offset:]
+        return bytes()
 
-    def get_colour_palette(self):
-        dib_header_size = int.from_bytes(self.bmp_bytes[14:18], "little")
-        bpp = self.get_bits_per_pixel()
-        if bpp <= 8:
-            num_colors = 2 ** bpp
-            palette = []
-            palette_start = 14 + dib_header_size
-            for i in range(num_colors):
-                b = self.bmp_bytes[palette_start + i*4]
-                g = self.bmp_bytes[palette_start + i*4 + 1]
-                r = self.bmp_bytes[palette_start + i*4 + 2]
-                palette.append((r, g, b))
-            return palette
-        else:
-            return []
+    def get_colour_palette(self) -> list[tuple[int, int, int]]:
+        if self.bmp_bytes:
+            dib_header_size = int.from_bytes(self.bmp_bytes[14:18], "little")
+            bpp = self.get_bits_per_pixel()
+            if bpp <= 8:
+                num_colors = 2 ** bpp
+                palette = []
+                palette_start = 14 + dib_header_size
+                for i in range(num_colors):
+                    b = self.bmp_bytes[palette_start + i*4]
+                    g = self.bmp_bytes[palette_start + i*4 + 1]
+                    r = self.bmp_bytes[palette_start + i*4 + 2]
+                    palette.append((r, g, b))
+                return palette
+        return []
 
-    def get_stride(self):
+    def get_stride(self) -> int:
         return ((self.get_original_width() * self.get_bits_per_pixel() + 31) // 32) * 4
 
-    def parse_rgb(self):
+    def parse_rgb(self) -> bytes:
         out = bytearray()
         width = self.get_original_width()
         height = self.get_original_height()
@@ -156,7 +175,7 @@ class BmpImage:
                             out += bytes((r, g, b))
         return bytes(out)
 
-    def refresh_channels(self):
+    def refresh_channels(self) -> None:
         w, h = self.get_width(), self.get_height()
         buf = self.get_displayable_image()
         img = np.frombuffer(buf, dtype=np.uint8).reshape(h, w, 3).astype(np.uint8)
@@ -165,7 +184,7 @@ class BmpImage:
         if not self.b: img[...,2] = 0
         self.display_bytes = img.tobytes()
 
-    def refresh_scale(self):
+    def refresh_scale(self) -> None:
         if self.scale <= 0:
             self.display_bytes = b""
             self.width = 0
@@ -209,7 +228,7 @@ class BmpImage:
     ], dtype=np.float32)
     yuv2rgb = np.linalg.inv(rgb2yuv).astype(np.float32)
 
-    def refresh_brightness(self):
+    def refresh_brightness(self) -> None:
         brightness = float(self.brightness)*2 / 100.0
         w, h = self.get_width(), self.get_height()
         buf = self.get_displayable_image()
@@ -220,15 +239,33 @@ class BmpImage:
         out = np.clip(out, 0.0, 1.0)
         self.display_bytes = (out * 255.0 + 0.5).astype(np.uint8).tobytes()
 
-    def refresh(self):
+    def refresh(self) -> None:
         if self.original_bytes:
             self.refresh_scale()
             self.refresh_brightness()
             self.refresh_channels()
 
-    def set_scale(self, scale): self.scale = int(scale); self.refresh()
-    def set_brightness(self, brightness): self.brightness = int(brightness); self.refresh()
-    def set_r(self, state): self.r = state; self.refresh()
-    def set_g(self, state): self.g = state; self.refresh()
-    def set_b(self, state): self.b = state; self.refresh()
-    def get_displayable_image(self): return self.display_bytes
+    def set_scale(self, scale) -> None: 
+        self.scale = int(scale)
+        self.refresh()
+    
+    def set_brightness(self, brightness) -> None: 
+        self.brightness = int(brightness)
+        self.refresh()
+
+    def set_r(self, state) -> None: 
+        self.r = state
+        self.refresh()
+
+    def set_g(self, state) -> None: 
+        self.g = state
+        self.refresh()
+
+    def set_b(self, state) -> None:
+        self.b = state
+        self.refresh()
+
+    def get_displayable_image(self) -> bytes:
+        if self.display_bytes:
+            return bytes(self.display_bytes)
+        return bytes()
