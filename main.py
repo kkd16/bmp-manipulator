@@ -80,7 +80,7 @@ class BmpImage:
             return self.file_size
         elif self.bmp_bytes:
             return int.from_bytes(self.bmp_bytes[2:6], "little")
-        return None
+        return 0
 
     def _parse_width(self):
         if self.bmp_bytes:
@@ -245,38 +245,35 @@ class BmpImage:
     def get_displayable_image(self): return self.display_bytes
 
 # -------- .cmpt365 file --------
-# magic[8]   = b"CMPT365\0"
-# width      u32
-# height     u32
-# bpp        u16
-# channels   u16  (3)
-# original_size   u32
+# magic[8]       = b"CMPT365\0"
+# width          u32
+# height         u32
+# channels       u16  (3)
+# original_size  u32
 # compressed_size u32
 # payload: encoded bytes
 CMPT365_MAGIC = b"CMPT365\x00"
-HEADER_STRUCT = "<8sIIHHII"
+HEADER_STRUCT = "<8sIIHII"
 
-def pack_header(width, height, bpp, channels, original_size, compressed_size):
+def pack_header(width, height, channels, original_size, compressed_size):
     return struct.pack(
         HEADER_STRUCT,
         CMPT365_MAGIC,
         width,
         height,
-        bpp,
         channels,
         original_size,
         compressed_size,
     )
 
 def unpack_header(data: bytes):
-    magic, width, height, bpp, channels, original_size, compressed_size = struct.unpack(
+    magic, width, height, channels, original_size, compressed_size = struct.unpack(
         HEADER_STRUCT, data[:struct.calcsize(HEADER_STRUCT)]
     )
     return {
         "magic": magic,
         "width": width,
         "height": height,
-        "bpp": bpp,
         "channels": channels,
         "original_size": original_size,
         "compressed_size": compressed_size,
@@ -415,12 +412,13 @@ def open_cmpt365_file(path: str):
 
     total_size = struct.calcsize(HEADER_STRUCT) + len(payload)
 
+    # bpp is not stored in .cmpt365; assume 24 for UI and stride logic
     img = BmpImage.from_raw_rgb(
         rgb_bytes=rgb_bytes,
         width=hdr["width"],
         height=hdr["height"],
         filepath=path,
-        bpp=(hdr["bpp"] or 24),
+        bpp=24,
         file_size=total_size
     )
     post_open_success(img, path)
@@ -516,13 +514,13 @@ def compress_to_cmpt365():
     original_size = bmp_image.get_file_size()
     width = bmp_image.get_original_width()
     height = bmp_image.get_original_height()
-    bpp = 24
 
     t0 = time.perf_counter()
     encoded = lzw_encode(src)
     t1 = time.perf_counter()
 
-    hdr = pack_header(width, height, bpp, 3, original_size, len(encoded))
+    # bpp removed from header; channels fixed to 3
+    hdr = pack_header(width, height, 3, original_size, len(encoded))
 
     default_name = os.path.splitext(os.path.basename(bmp_image.filepath or "output"))[0] + ".cmpt365"
     save_path = filedialog.asksaveasfilename(defaultextension=".cmpt365",
@@ -543,7 +541,7 @@ def compress_to_cmpt365():
     original_size_var.set(str(original_size))
     total_compressed_size = str(struct.calcsize(HEADER_STRUCT) + len(encoded))
     compressed_size_var.set(total_compressed_size)
-    ratio_var.set(f"{(original_size / len(encoded)):.3f}x" if len(encoded) else "—")
+    ratio_var.set(f"{(original_size / total_compressed_size):.3f}x" if len(encoded) else "—")
     time_ms_var.set(f"{(t1 - t0)*1000:.2f}")
     messagebox.showinfo("Saved", f"Saved {save_path} successfully")
 
@@ -590,7 +588,6 @@ sliders_frame.columnconfigure(1, weight=1); sliders_frame.columnconfigure(3, wei
 comp_frame = tk.LabelFrame(root, text="Compression (LZW)")
 comp_frame.pack(fill="x", padx=10, pady=(0, 10))
 tk.Button(comp_frame, text="Compress (.cmpt365)", command=compress_to_cmpt365).grid(row=0, column=0, padx=(0, 8), pady=8, sticky="w")
-# Opening handled by Browse
 
 tk.Label(comp_frame, text="Original Size:").grid(row=1, column=0, sticky="e", padx=5, pady=3)
 original_size_var = tk.StringVar(value="—"); tk.Label(comp_frame, textvariable=original_size_var).grid(row=1, column=1, sticky="w", padx=5, pady=3)
