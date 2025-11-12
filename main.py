@@ -283,6 +283,8 @@ def unpack_header(data: bytes):
         "compressed_size": compressed_size,
     }
 
+MAX_BITS = 16
+MAX_DICT = (1 << MAX_BITS)
 # Encode function adapted and ported to Python from GeeksForGeeks (LZW)
 # https://www.geeksforgeeks.org/computer-networks/lzw-lempel-ziv-welch-compression-technique/
 def lzw_encode(src_bytes: bytes) -> bytes:
@@ -304,7 +306,7 @@ def lzw_encode(src_bytes: bytes) -> bytes:
             table[pc] = next_code
             next_code += 1
 
-            if next_code == 65536:
+            if next_code == MAX_DICT:
                 table = {bytes([i]): i for i in range(256)}
                 next_code = 256
 
@@ -319,9 +321,6 @@ def lzw_encode(src_bytes: bytes) -> bytes:
 def lzw_decode(src_encoded: bytes) -> bytes:
     if not src_encoded:
         return b""
-
-    if len(src_encoded) % 2 != 0:
-        raise ValueError("Encoded LZW payload length must be even (16-bit codes).")
 
     num_codes = len(src_encoded) // 2
     codes = list(struct.unpack("<" + "H" * num_codes, src_encoded))
@@ -345,7 +344,7 @@ def lzw_decode(src_encoded: bytes) -> bytes:
         table[next_code] = table[old] + c
         next_code += 1
 
-        if next_code == 65536:
+        if next_code == MAX_DICT:
             table = {i: bytes([i]) for i in range(256)}
             next_code = 256
 
