@@ -368,13 +368,89 @@ def clear_compression_stats():
     ratio_var.set("—")
     time_ms_var.set("—")
 
-def browse_file():
+def post_open_success(img: "BmpImage", path: str):
     global bmp_image
+    bmp_image = img
+    file_path_entry.delete(0, tk.END)
+    file_path_entry.insert(0, path)
+    brightness_scale.set(50)
+    scale_scale.set(50)
+    r_toggle_var.set(True)
+    g_toggle_var.set(True)
+    b_toggle_var.set(True)
+    clear_compression_stats()
+    display_image(bmp_image)
+
+def open_cmpt365_file(path: str):
+    try:
+        with open(path, "rb") as f:
+            head_bytes = f.read(struct.calcsize(HEADER_STRUCT))
+            hdr = unpack_header(head_bytes)
+            payload = f.read()
+    except Exception as e:
+        clear_compression_stats()
+        messagebox.showerror("Open Error", f"Failed to open .cmpt365:\n{e}")
+        return
+
+    if hdr["magic"] != CMPT365_MAGIC:
+        clear_compression_stats()
+        show_message_on_canvas("Invalid .cmpt365 file (bad magic).")
+        return
+
+    if hdr["compressed_size"] != len(payload):
+        clear_compression_stats()
+        messagebox.showerror(
+            "Open Error",
+            f"Invalid .cmpt365: expected {hdr['compressed_size']} bytes of payload, "
+            f"got {len(payload)}."
+        )
+        return
+
+    try:
+        rgb_bytes = lzw_decode(payload)
+    except Exception as e:
+        clear_compression_stats()
+        messagebox.showerror("Decode Error", f"LZW decode failed:\n{e}")
+        return
+
+    total_size = struct.calcsize(HEADER_STRUCT) + len(payload)
+
+    img = BmpImage.from_raw_rgb(
+        rgb_bytes=rgb_bytes,
+        width=hdr["width"],
+        height=hdr["height"],
+        filepath=path,
+        bpp=(hdr["bpp"] or 24),
+        file_size=total_size
+    )
+    post_open_success(img, path)
+
+def open_bmp_file(path: str):
+    global bmp_image
+
+    try:
+        img = BmpImage.from_file(path)
+    except ValueError as e:
+        bmp_image = None
+        file_path_entry.delete(0, tk.END)
+        file_size_var.set("—"); width_var.set("—"); height_var.set("—"); bpp_var.set("—")
+        clear_compression_stats()
+        show_message_on_canvas(str(e))
+        return
+    except Exception as e:
+        bmp_image = None
+        clear_compression_stats()
+        messagebox.showerror("Open Error", f"Failed to open BMP:\n{e}")
+        return
+
+    post_open_success(img, path)
+
+def browse_file():
     path = filedialog.askopenfilename(
         filetypes=[
             ("Supported Images", "*.bmp *.cmpt365"),
             ("Bitmap Images", "*.bmp"),
-            ("CMPT365 File", "*.cmpt365")
+            ("CMPT365 File", "*.cmpt365"),
         ]
     )
     if not path:
@@ -388,59 +464,11 @@ def browse_file():
         messagebox.showerror("Open Error", f"Failed to open file:\n{e}")
         return
 
-    try:
-        if head.startswith(CMPT365_MAGIC):
-            try:
-                with open(path, "rb") as f:
-                    head_bytes = f.read(struct.calcsize(HEADER_STRUCT))
-                    hdr = unpack_header(head_bytes)
-                    payload = f.read()
-            except Exception as e:
-                clear_compression_stats()
-                messagebox.showerror("Open Error", f"Failed to open .cmpt365:\n{e}")
-                return
+    if head.startswith(CMPT365_MAGIC):
+        open_cmpt365_file(path)
+    else:
+        open_bmp_file(path)
 
-            if hdr["magic"] != CMPT365_MAGIC:
-                clear_compression_stats()
-                messagebox.showwarning("Unsupported", "Invalid .cmpt365 file.")
-                return
-
-            try:
-                rgb_bytes = lzw_decode(payload)
-            except Exception as e:
-                clear_compression_stats()
-                messagebox.showerror("Decode Error", f"LZW decode failed:\n{e}")
-                return
-
-            bmp_image = BmpImage.from_raw_rgb(
-                rgb_bytes=rgb_bytes,
-                width=hdr["width"],
-                height=hdr["height"],
-                filepath=path,
-                bpp=hdr["bpp"] or 24,
-                file_size=hdr["original_size"]
-            )
-        else:
-            bmp_image = BmpImage.from_file(path)
-
-    except ValueError as e:
-        bmp_image = None
-        file_path_entry.delete(0, tk.END)
-        file_size_var.set("—"); width_var.set("—"); height_var.set("—"); bpp_var.set("—")
-        clear_compression_stats()
-        show_message_on_canvas(str(e))
-        return
-    except Exception as e:
-        bmp_image = None
-        clear_compression_stats()
-        messagebox.showerror("Open Error", f"Failed to open file:\n{e}")
-        return
-
-    file_path_entry.delete(0, tk.END); file_path_entry.insert(0, path)
-    brightness_scale.set(50); scale_scale.set(50)
-    r_toggle_var.set(True); g_toggle_var.set(True); b_toggle_var.set(True)
-    clear_compression_stats()
-    display_image(bmp_image)
 
 def display_image(bmp_obj):
     rgb_bytes = bmp_obj.get_displayable_image()
@@ -485,7 +513,7 @@ def compress_to_cmpt365():
         return
 
     src = bmp_image.original_bytes
-    original_size = len(src)
+    original_size = bmp_image.get_file_size()
     width = bmp_image.get_original_width()
     height = bmp_image.get_original_height()
     bpp = 24
@@ -501,7 +529,7 @@ def compress_to_cmpt365():
                                              initialfile=default_name,
                                              filetypes=[("CMPT365 File", "*.cmpt365")])
     if not save_path:
-        show_message_on_canvas("Compression canceled.")
+        messagebox.showerror("Compression Cancelled", "File not saved.")
         return
 
     try:
@@ -513,7 +541,8 @@ def compress_to_cmpt365():
         return
 
     original_size_var.set(str(original_size))
-    compressed_size_var.set(str(len(encoded)))
+    total_compressed_size = str(struct.calcsize(HEADER_STRUCT) + len(encoded))
+    compressed_size_var.set(total_compressed_size)
     ratio_var.set(f"{(original_size / len(encoded)):.3f}x" if len(encoded) else "—")
     time_ms_var.set(f"{(t1 - t0)*1000:.2f}")
     messagebox.showinfo("Saved", f"Saved {save_path} successfully")
