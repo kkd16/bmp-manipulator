@@ -524,7 +524,7 @@ def compress_to_cmpt365():
 
     width = bmp_image.get_original_width()
     height = bmp_image.get_original_height()
-    original_size = len(src)  # size of BMP bytes we’re compressing
+    original_size = len(src)
 
     t0 = time.perf_counter()
     encoded = lzw_encode(src)
