@@ -308,13 +308,9 @@ def lzw_encode(src_bytes: bytes) -> bytes:
             p = pc
         else:
             out.append(table[p])
-            table[pc] = next_code
-            next_code += 1
-
-            if next_code == MAX_DICT:
-                table = {bytes([i]): i for i in range(256)}
-                next_code = 256
-
+            if next_code < MAX_DICT:
+                table[pc] = next_code
+                next_code += 1
             p = c
 
     out.append(table[p])
@@ -346,12 +342,10 @@ def lzw_decode(src_encoded: bytes) -> bytes:
 
         out.extend(s)
         c = s[:1]
-        table[next_code] = table[old] + c
-        next_code += 1
 
-        if next_code == MAX_DICT:
-            table = {i: bytes([i]) for i in range(256)}
-            next_code = 256
+        if next_code < MAX_DICT:
+            table[next_code] = table[old] + c
+            next_code += 1
 
         old = n
 
